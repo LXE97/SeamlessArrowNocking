@@ -1,5 +1,7 @@
-#include "mod_input.h"
+#include "vrinput.h"
 
+#include "VR/OpenVRUtils.h"
+#include "main_plugin.h"
 #include "menu_checker.h"
 
 namespace vrinput
@@ -106,6 +108,10 @@ namespace vrinput
 		if (it != fake_button_states.end()) { fake_button_states.erase(it); }
 	}
 
+	void ClearAllFake(){
+		fake_button_states.clear();
+	}
+
 	void ProcessButtonChanges(uint64_t changedMask, uint64_t currentState, bool isLeft, bool touch,
 		vr::VRControllerState_t* out)
 	{
@@ -123,8 +129,9 @@ namespace vrinput
 				// check whether it was a press or release event
 				bool buttonPress = bitmask & currentState;
 
-				const ModInputEvent event_flags = ModInputEvent(static_cast<Hand>(isLeft),
-					static_cast<ActionType>(touch), static_cast<ButtonState>(buttonPress));
+				const ModInputEvent event_flags =
+					ModInputEvent(static_cast<Hand>(isLeft), static_cast<ActionType>(touch),
+						static_cast<ButtonState>(buttonPress), buttonID);
 
 				// iterate through callbacks for this button and call if flags match
 				for (auto& cb : callbacks[buttonID])
@@ -354,8 +361,8 @@ namespace vrinput
 				AsmSetControllerAxes code_set_axes;
 				code_set_axes.ready();
 				auto SetControllerAxes = code_set_axes.getCode<void (*)(float, float, float)>();
-				SetControllerAxes(
-					pOutputControllerState->rAxis[0].x, pOutputControllerState->rAxis[0].y, local_trigger);
+				SetControllerAxes(pOutputControllerState->rAxis[0].x,
+					pOutputControllerState->rAxis[0].y, local_trigger);
 
 				AsmSetControllerState code_set_buttons;
 				code_set_buttons.ready();
@@ -402,6 +409,10 @@ namespace vrinput
 		return hmdMatrix;
 	}
 
+	bool                         overlapping = false;
+	PapyrusVR::TrackedDevicePose bow;
+	PapyrusVR::TrackedDevicePose arrow;
+
 	// handles device poses
 	vr::EVRCompositorError ControllerPoseCallback(VR_ARRAY_COUNT(unRenderPoseArrayCount)
 													  vr::TrackedDevicePose_t* pRenderPoseArray,
@@ -409,48 +420,44 @@ namespace vrinput
 		VR_ARRAY_COUNT(unGamePoseArrayCount) vr::TrackedDevicePose_t* pGamePoseArray,
 		uint32_t                                                      unGamePoseArrayCount)
 	{
-		static vr::TrackedDevicePose_t simple_buffer[2] = {};
-
-		for (auto isLeft : { true, false })
+		using namespace PapyrusVR;
+		if (pGamePoseArray[g_rightcontroller].bPoseIsValid)
 		{
-			auto device = isLeft ? g_leftcontroller : g_rightcontroller;
+			// compute overlap
+			auto bow_device = arrownock::g_left_hand_mode ? g_rightcontroller : g_leftcontroller;
+			auto arrow_device = arrownock::g_left_hand_mode ? g_leftcontroller : g_rightcontroller;
 
-			if (smoothing)
+			std::memcpy(&bow, pGamePoseArray + bow_device, sizeof(PapyrusVR::TrackedDevicePose));
+			std::memcpy(
+				&arrow, pGamePoseArray + arrow_device, sizeof(PapyrusVR::TrackedDevicePose));
+
+			auto nock_location = bow.mDeviceToAbsoluteTracking * arrownock::g_overlap_offset;
+			auto arrow_hand_location = arrow.mDeviceToAbsoluteTracking * Vector3();
+
+			auto distance = arrow_hand_location - nock_location;
+
+			if (distance.lengthSquared() < arrownock::g_overlap_radius)
 			{
-				auto pre = HmdMatrixToNiTransform(simple_buffer[isLeft].mDeviceToAbsoluteTracking);
-				auto cur = HmdMatrixToNiTransform(pGamePoseArray[device].mDeviceToAbsoluteTracking);
+				arrownock::OnPoseUpdate();
 
-				// TODO: real filtering algorithm
-				constexpr float low_rate = 0.04f;
-				constexpr float mid_rate = 0.14f;
-				constexpr float high_rate = 0.2f;
-				constexpr float low_threshold = 0.003f * 0.003f;
-				constexpr float mid_threshold = 0.008f * 0.008f;
-				constexpr float high_threshold = 0.05f * 0.05f;
-
-				auto dist = pre.translate.GetSquaredDistance(cur.translate);
-
-				if (dist > high_threshold)
+				if (!overlapping)
 				{
-					pre.translate = helper::LinearInterp(pre.translate, cur.translate, high_rate);
+					_DEBUGLOG("overlap: ENTER");
+					overlapping = true;
+					arrownock::OnOverlap(true);
 				}
-				else if (dist > mid_threshold)
-				{
-					pre.translate = helper::LinearInterp(pre.translate, cur.translate, mid_rate);
-				}
-				else if (dist > low_threshold)
-				{
-					pre.translate = helper::LinearInterp(pre.translate, cur.translate, low_rate);
-				}
-
-				// adaptive slerp?
-				pre.rotate = helper::slerpMatrixAdaptive(pre.rotate, cur.rotate);
-
-				pGamePoseArray[device].mDeviceToAbsoluteTracking = NiTransformToHmdMatrix(pre);
-				simple_buffer[isLeft] = pGamePoseArray[device];
 			}
-			else { simple_buffer[isLeft] = pGamePoseArray[device]; }
+			else
+			{
+				if (overlapping)
+				{
+					_DEBUGLOG("overlap: EXIT");
+					overlapping = false;
+					arrownock::OnOverlap(false);
+				}
+			}
 		}
+
 		return vr::EVRCompositorError::VRCompositorError_None;
 	}
 }

@@ -6,19 +6,46 @@
 #include "VR/VRManagerAPI.h"
 #include "menu_checker.h"
 #include "mod_event_sink.hpp"
-#include "mod_input.h"
+#include "vrinput.h"
+
+#define _DEBUGLOG(...) \
+	if (arrownock::g_debug_print) { SKSE::log::trace(__VA_ARGS__); }
 
 namespace arrownock
 {
-	extern PapyrusVRAPI* g_papyrusvr;
+	constexpr const char* g_ini_path = "SKSE/Plugins/SeamlessArrowNocking.ini";
+
+	extern PapyrusVRAPI*      g_papyrusvr;
+	extern bool               g_left_hand_mode;
+	extern float              g_overlap_radius;
+	extern PapyrusVR::Vector3 g_overlap_offset;
+	extern bool               g_debug_print;
 
 	void StartMod();
 
-	void EquippedEventHandler(const RE::TESEquipEvent* event);
+	void OnGameLoad();
 
-	bool OnArrowButton(const vrinput::ModInputEvent& e);
+	void OnPoseUpdate();
 
-	void OnOverlap(PapyrusVR::VROverlapEvent e, uint32_t id, PapyrusVR::VRDevice device);
+	void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn);
+
+	void OnEquipped(const RE::TESEquipEvent* event);
+
+	bool OnButtonEvent(const vrinput::ModInputEvent& e);
+
+	void OnOverlap(bool entered);
+
+	bool IsArrowNocked();
+
+	void GetBowBaseAngle(RE::NiPoint3* out);
+
+	void TryNockArrow();
+
+	void UnregisterButtons();
+	void RegisterButtons();
 
 	void RegisterVRInputCallback();
+
+	/* returns: true if config file changed */
+	bool ReadConfig(const char* a_ini_path);
 }

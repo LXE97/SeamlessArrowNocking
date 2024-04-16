@@ -220,14 +220,16 @@ namespace helper
 			std::string line;
 			while (std::getline(a_file, line))
 			{
-				if (line.find(a_setting) == 0)
+				if (line[0] != '#' && line.find(a_setting) == 0)
 				{
 					auto found = line.find('=');
 					if (found != std::string::npos)
 					{
 						a_file.clear();
-						a_file.seekg(0, std::ios::beg);
-						return std::stof(line.substr(found + 1));
+						a_file.seekg(0, a_file.beg);
+						auto val = std::stof(line.substr(found + 1));
+						SKSE::log::trace("{} : {}", a_setting, val);
+						return val;
 					}
 				}
 			}
@@ -250,7 +252,9 @@ namespace helper
 					{
 						a_file.clear();
 						a_file.seekg(0, std::ios::beg);
-						return std::stoi(line.substr(found + 1));
+						auto val = std::stoi(line.substr(found + 1));
+						SKSE::log::trace("{} : {}", a_setting, val);
+						return val;
 					}
 				}
 			}

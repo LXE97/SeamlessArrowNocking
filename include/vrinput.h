@@ -120,6 +120,8 @@ namespace vrinput
 	/* Clears an override, otherwise fake button state persists forever. Does nothing if no override exists */
 	void ClearFakeButtonState(const ModInputEvent a_event);
 
+	void ClearAllFake();
+
 	/* Sets a momentary button state, the button will be returned to its true state in the next update.
 	*/
 	void SendFakeInputEvent(const ModInputEvent a_event);

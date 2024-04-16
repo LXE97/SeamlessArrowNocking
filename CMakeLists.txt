@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(SeamlessArrowNocking VERSION 0.0.1 LANGUAGES CXX)
+project(ZSeamlessArrowNocking VERSION 0.0.1 LANGUAGES CXX)
 
 # Destination to copy .dll
 if(DEFINED ENV{SKYRIM_FOLDER} AND IS_DIRECTORY "$ENV{SKYRIM_FOLDER}/Data")

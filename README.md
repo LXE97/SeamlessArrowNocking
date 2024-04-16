@@ -1,5 +1,11 @@
 ## (WIP) SKSE plugin source for Skyrim mod: Seamless Arrow Nocking
 
+### User requirements:
+* SKSE
+* Skyrim VR Tools
+* Address Library VR
+
+
 ## Build instructions:
 1. install [vcpkg](https://github.com/microsoft/vcpkg)
 2. add vcpkg path to environment variables as VCPKG_ROOT and run /vcpkg/bootstrap-vcpkg.bat

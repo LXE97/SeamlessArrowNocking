@@ -1,10 +1,10 @@
-#include <spdlog/sinks/basic_file_sink.h>
 #include "main_plugin.h"
 
+#include <spdlog/sinks/basic_file_sink.h>
 
-void    MessageListener(SKSE::MessagingInterface::Message* message);
-void    OnPapyrusVRMessage(SKSE::MessagingInterface::Message* message);
-void    SetupLog();
+void MessageListener(SKSE::MessagingInterface::Message* message);
+void OnPapyrusVRMessage(SKSE::MessagingInterface::Message* message);
+void SetupLog();
 
 // Interfaces for communicating with other SKSE plugins.
 static SKSE::detail::SKSEMessagingInterface* g_messaging;
@@ -40,6 +40,8 @@ void MessageListener(SKSE::MessagingInterface::Message* message)
 	case SKSE::MessagingInterface::kDataLoaded:
 		arrownock::StartMod();
 
+	case SKSE::MessagingInterface::kPostLoadGame:
+		arrownock::OnGameLoad();
 	default:
 		break;
 	}
@@ -53,8 +55,7 @@ void OnPapyrusVRMessage(SKSE::MessagingInterface::Message* message)
 	{
 		if (message->type == kPapyrusVR_Message_Init && message->data)
 		{
-			SKSE::log::info(
-				"SkyrimVRTools Init Message recived with valid data, registering for callback");
+			SKSE::log::info("SkyrimVRTools: registering for callback");
 			arrownock::g_papyrusvr = (PapyrusVRAPI*)message->data;
 		}
 	}
