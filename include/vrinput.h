@@ -126,6 +126,7 @@ namespace vrinput
 	*/
 	void SendFakeInputEvent(const ModInputEvent a_event);
 
+	void InitControllerHooks();
 
 	/* This needs to be fed to OVRHookManager::RegisterControllerStateCB() */
 	bool ControllerInputCallback(vr::TrackedDeviceIndex_t unControllerDeviceIndex,

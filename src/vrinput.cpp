@@ -108,9 +108,7 @@ namespace vrinput
 		if (it != fake_button_states.end()) { fake_button_states.erase(it); }
 	}
 
-	void ClearAllFake(){
-		fake_button_states.clear();
-	}
+	void ClearAllFake() { fake_button_states.clear(); }
 
 	void ProcessButtonChanges(uint64_t changedMask, uint64_t currentState, bool isLeft, bool touch,
 		vr::VRControllerState_t* out)
@@ -201,16 +199,23 @@ namespace vrinput
 
 	/* For spoofing button presses. VRTools lets us clear bits but not set them.
 	* see https://github.com/SkyrimAlternativeDevelopers/SkyrimVRTools/blob/master/src/hooks/HookVRSystem.cpp#L91
-	* this code is effectively:
-	* finalState.ulButtonPressed |= modifiedControllerState.ulButtonPressed;
-	* finalState.ulButtonTouched |= modifiedControllerState.ulButtonTouched;
+	* Writes to all 3 copies of the controller state so that proceeding input callbacks don't overwrite our changes
+	* by default. That means other mods may or may not see the fake button presses depending on the order in which
+	* the callbacks are processed, and if they do, they may choose to clear them.
 	*/
-	struct AsmSetControllerState : Xbyak::CodeGenerator
+	struct AsmSetControllerButtons : Xbyak::CodeGenerator
 	{
-		AsmSetControllerState()
+		AsmSetControllerButtons()
 		{
-			or_(r12, ptr[rbp - 0x68]);
-			or_(r13, ptr[rbp - 0x60]);
+			or_(r12, ptr[rbp - 0x60]);  // touch
+			or_(r13, ptr[rbp - 0x68]);  // press
+
+			mov(ptr[rbp - 0x20], r12);  // touch
+			mov(ptr[rbp - 0x28], r13);  // press
+
+			mov(ptr[rbp - 0xA0], r12);  // touch
+			mov(ptr[rbp - 0xA8], r13);  // press
+
 			ret();
 		}
 	};
@@ -237,6 +242,16 @@ namespace vrinput
 			ret();
 		}
 	};
+
+	AsmSetControllerAxes    code_set_axes;
+	AsmSetControllerButtons code_set_buttons;
+
+	void InitControllerHooks()
+	{
+		code_set_axes.ready();
+
+		code_set_buttons.ready();
+	}
 
 	// handles low level button/trigger events
 	bool ControllerInputCallback(vr::TrackedDeviceIndex_t unControllerDeviceIndex,
@@ -351,23 +366,18 @@ namespace vrinput
 				{
 					pOutputControllerState->ulButtonPressed = 0;
 					pOutputControllerState->ulButtonTouched = 0;
-					pOutputControllerState->rAxis[0].x = 0;
-					pOutputControllerState->rAxis[0].y = 0;
-					local_trigger = 0;
+					pOutputControllerState->rAxis[0].x = 0.0;
+					pOutputControllerState->rAxis[0].y = 0.0;
+					local_trigger = 0.0;
 				}
 
-				// TODO: make these static?
+				auto SetControllerAxesFunc = code_set_axes.getCode<void (*)(float, float, float)>();
+				auto SetControllerButtonsFunc = code_set_buttons.getCode<void (*)(void)>();
 
-				AsmSetControllerAxes code_set_axes;
-				code_set_axes.ready();
-				auto SetControllerAxes = code_set_axes.getCode<void (*)(float, float, float)>();
-				SetControllerAxes(pOutputControllerState->rAxis[0].x,
+				SetControllerAxesFunc(pOutputControllerState->rAxis[0].x,
 					pOutputControllerState->rAxis[0].y, local_trigger);
 
-				AsmSetControllerState code_set_buttons;
-				code_set_buttons.ready();
-				auto SetControllerStateFunc = code_set_buttons.getCode<void (*)(void)>();
-				SetControllerStateFunc();
+				SetControllerButtonsFunc();
 			}
 		}
 		return true;

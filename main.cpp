@@ -10,6 +10,12 @@ void SetupLog();
 static SKSE::detail::SKSEMessagingInterface* g_messaging;
 static SKSE::PluginHandle                    g_pluginHandle = 0xffff;
 
+void InitializeHooking()
+{
+	auto& trampoline = SKSE::GetTrampoline();
+	trampoline.create(128);
+}
+
 // Main plugin entry point.
 SKSEPluginLoad(const SKSE::LoadInterface* skse)
 {
@@ -55,7 +61,6 @@ void OnPapyrusVRMessage(SKSE::MessagingInterface::Message* message)
 	{
 		if (message->type == kPapyrusVR_Message_Init && message->data)
 		{
-			SKSE::log::info("SkyrimVRTools: registering for callback");
 			arrownock::g_papyrusvr = (PapyrusVRAPI*)message->data;
 		}
 	}

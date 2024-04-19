@@ -44,7 +44,7 @@ namespace arrownock
 		RE::UI::GetSingleton()->AddEventSink(menu_sink);
 
 		menuchecker::begin();
-        RegisterButtons();
+		RegisterButtons();
 		RegisterVRInputCallback();
 	}
 
@@ -94,13 +94,9 @@ namespace arrownock
 								!g_left_hand_mode);
 							weap && weap->IsWeapon() && weap->As<RE::TESObjectWEAP>()->IsBow())
 						{
-							// check if base angle is set
-							if (g_unbent_bow_angle == RE::NiPoint3())
-							{
-								GetBowBaseAngle(&g_unbent_bow_angle);
-								_DEBUGLOG(
-									"Got unbent angle: {} {} {}", VECTOR((g_unbent_bow_angle)));
-							}
+							// get the bow angle when no arrow is nocked
+							GetBowBaseAngle(&g_unbent_bow_angle);
+							_DEBUGLOG("Got unbent angle: {} {} {}", VECTOR((g_unbent_bow_angle)));
 
 							g_arrow_held_button = vr::k_EButton_Max;
 
@@ -122,11 +118,6 @@ namespace arrownock
 							}
 						}
 					}
-				}
-				else if (form->IsWeapon() && form->As<RE::TESObjectWEAP>()->IsBow())
-				{
-					GetBowBaseAngle(&g_unbent_bow_angle);
-					_DEBUGLOG("Got unbent angle: {} {} {}", VECTOR((g_unbent_bow_angle)));
 				}
 			}
 		}
@@ -195,9 +186,7 @@ namespace arrownock
 	{
 		if (auto pc = RE::PlayerCharacter::GetSingleton(); pc && pc->Get3D(g_vrik_disabled))
 		{
-			auto bow = pc->Get3D(g_vrik_disabled)
-						   ->GetObjectByName("SHIELD")
-						   ->world;
+			auto bow = pc->Get3D(g_vrik_disabled)->GetObjectByName("SHIELD")->world;
 			auto hand =
 				vrinput::GetHandNode((vrinput::Hand)!g_left_hand_mode, g_vrik_disabled)->world;
 
@@ -217,7 +206,7 @@ namespace arrownock
 			ang = g_unbent_bow_angle - ang;
 
 			auto norm = std::sqrt(ang.x * ang.x + ang.y * ang.y + ang.z * ang.z);
-_DEBUGLOG("{}", norm);
+			_DEBUGLOG("{}", norm);
 			return norm > g_angle_diff_threshold;
 		}
 		return false;
@@ -302,6 +291,8 @@ _DEBUGLOG("{}", norm);
 			if (OVRHookManager)
 			{
 				SKSE::log::info("Successfully requested OpenVRHookManagerAPI.");
+
+				vrinput::InitControllerHooks();
 
 				vrinput::g_leftcontroller =
 					OVRHookManager->GetVRSystem()->GetTrackedDeviceIndexForControllerRole(
