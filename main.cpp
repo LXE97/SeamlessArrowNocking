@@ -44,7 +44,7 @@ void MessageListener(SKSE::MessagingInterface::Message* message)
 		break;
 
 	case SKSE::MessagingInterface::kDataLoaded:
-		arrownock::StartMod();
+		arrownock::Init();
 
 	case SKSE::MessagingInterface::kPostLoadGame:
 		arrownock::OnGameLoad();

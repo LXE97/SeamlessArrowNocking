@@ -201,7 +201,7 @@ namespace vrinput
 	* see https://github.com/SkyrimAlternativeDevelopers/SkyrimVRTools/blob/master/src/hooks/HookVRSystem.cpp#L91
 	* Writes to all 3 copies of the controller state so that proceeding input callbacks don't overwrite our changes
 	* by default. That means other mods may or may not see the fake button presses depending on the order in which
-	* the callbacks are processed, and if they do, they may choose to clear them.
+	* the callbacks are processed, and if they do, they may clear them.
 	*/
 	struct AsmSetControllerButtons : Xbyak::CodeGenerator
 	{
@@ -305,36 +305,39 @@ namespace vrinput
 
 				auto local_trigger = pControllerState->rAxis[1].x;
 
+				bool need_to_write_state = !(fake_event_queue_left.empty() &&
+					fake_event_queue_right.empty() && fake_button_states.empty());
+
 				// momentary button spoofing
-				if ((isLeft && !fake_event_queue_left.empty()) ||
-					(!isLeft && !fake_event_queue_right.empty()))
+				if ((!fake_event_queue_left.empty() && isLeft) ||
+					(!fake_event_queue_right.empty() && !isLeft))
 				{
 					static std::deque<std::pair<ModInputEvent, vr::EVRButtonId>>* spoof_queue;
 					spoof_queue = isLeft ? &fake_event_queue_left : &fake_event_queue_right;
 
-					do {
-						auto&     event = spoof_queue->front();
-						uint64_t* state = event.first.touch_or_press == ActionType::kPress ?
-							&(pOutputControllerState->ulButtonPressed) :
-							&(pOutputControllerState->ulButtonTouched);
+					//do {
+					auto&     event = spoof_queue->front();
+					uint64_t* state = event.first.touch_or_press == ActionType::kPress ?
+						&(pOutputControllerState->ulButtonPressed) :
+						&(pOutputControllerState->ulButtonTouched);
 
-						*state = event.first.button_state == ButtonState::kButtonDown ?
-							*state | 1ull << event.second :
-							*state & ~(1ull << event.second);
+					*state = event.first.button_state == ButtonState::kButtonDown ?
+						*state | 1ull << event.second :
+						*state & ~(1ull << event.second);
 
-						if (event.second == k_EButton_SteamVR_Trigger)
+					if (event.second == k_EButton_SteamVR_Trigger)
+					{
+						if (event.first.button_state == ButtonState::kButtonDown &&
+							event.first.touch_or_press == ActionType::kPress)
 						{
-							if (event.first.button_state == ButtonState::kButtonDown &&
-								event.first.touch_or_press == ActionType::kPress)
-							{
-								local_trigger = 1.f;
-							}
-							else { local_trigger = 0.f; }
+							local_trigger = 1.f;
 						}
+						else { local_trigger = 0.f; }
+					}
 
-						spoof_queue->pop_front();
+					spoof_queue->pop_front();
 
-					} while (!spoof_queue->empty());
+					//} while (!spoof_queue->empty());
 				}
 
 				// hold button spoofing
@@ -371,16 +374,38 @@ namespace vrinput
 					local_trigger = 0.0;
 				}
 
-				auto SetControllerAxesFunc = code_set_axes.getCode<void (*)(float, float, float)>();
-				auto SetControllerButtonsFunc = code_set_buttons.getCode<void (*)(void)>();
+				if (need_to_write_state)
+				{
+					auto SetControllerAxesFunc =
+						code_set_axes.getCode<void (*)(float, float, float)>();
+					auto SetControllerButtonsFunc = code_set_buttons.getCode<void (*)(void)>();
 
-				SetControllerAxesFunc(pOutputControllerState->rAxis[0].x,
-					pOutputControllerState->rAxis[0].y, local_trigger);
+					SetControllerAxesFunc(pOutputControllerState->rAxis[0].x,
+						pOutputControllerState->rAxis[0].y, local_trigger);
 
-				SetControllerButtonsFunc();
+					SetControllerButtonsFunc();
+				}
 			}
 		}
 		return true;
+	}
+
+	bool                         overlapping = false;
+	PapyrusVR::TrackedDevicePose bow;
+	PapyrusVR::TrackedDevicePose arrow;
+
+	// handles device poses
+	vr::EVRCompositorError ControllerPoseCallback(VR_ARRAY_COUNT(unRenderPoseArrayCount)
+													  vr::TrackedDevicePose_t* pRenderPoseArray,
+		uint32_t                                                      unRenderPoseArrayCount,
+		VR_ARRAY_COUNT(unGamePoseArrayCount) vr::TrackedDevicePose_t* pGamePoseArray,
+		uint32_t                                                      unGamePoseArrayCount)
+	{
+		using namespace PapyrusVR;
+
+		arrownock::OnUpdate();
+
+		return vr::EVRCompositorError::VRCompositorError_None;
 	}
 
 	RE::NiTransform HmdMatrixToNiTransform(const HmdMatrix34_t& hmdMatrix)
@@ -417,57 +442,5 @@ namespace vrinput
 		hmdMatrix.m[2][3] = niTransform.translate.z;
 
 		return hmdMatrix;
-	}
-
-	bool                         overlapping = false;
-	PapyrusVR::TrackedDevicePose bow;
-	PapyrusVR::TrackedDevicePose arrow;
-
-	// handles device poses
-	vr::EVRCompositorError ControllerPoseCallback(VR_ARRAY_COUNT(unRenderPoseArrayCount)
-													  vr::TrackedDevicePose_t* pRenderPoseArray,
-		uint32_t                                                      unRenderPoseArrayCount,
-		VR_ARRAY_COUNT(unGamePoseArrayCount) vr::TrackedDevicePose_t* pGamePoseArray,
-		uint32_t                                                      unGamePoseArrayCount)
-	{
-		using namespace PapyrusVR;
-		if (pGamePoseArray[g_rightcontroller].bPoseIsValid)
-		{
-			// compute overlap
-			auto bow_device = arrownock::g_left_hand_mode ? g_rightcontroller : g_leftcontroller;
-			auto arrow_device = arrownock::g_left_hand_mode ? g_leftcontroller : g_rightcontroller;
-
-			std::memcpy(&bow, pGamePoseArray + bow_device, sizeof(PapyrusVR::TrackedDevicePose));
-			std::memcpy(
-				&arrow, pGamePoseArray + arrow_device, sizeof(PapyrusVR::TrackedDevicePose));
-
-			auto nock_location = bow.mDeviceToAbsoluteTracking * arrownock::g_overlap_offset;
-			auto arrow_hand_location = arrow.mDeviceToAbsoluteTracking * Vector3();
-
-			auto distance = arrow_hand_location - nock_location;
-
-			if (distance.lengthSquared() < arrownock::g_overlap_radius)
-			{
-				arrownock::OnPoseUpdate();
-
-				if (!overlapping)
-				{
-					_DEBUGLOG("overlap: ENTER");
-					overlapping = true;
-					arrownock::OnOverlap(true);
-				}
-			}
-			else
-			{
-				if (overlapping)
-				{
-					_DEBUGLOG("overlap: EXIT");
-					overlapping = false;
-					arrownock::OnOverlap(false);
-				}
-			}
-		}
-
-		return vr::EVRCompositorError::VRCompositorError_None;
 	}
 }

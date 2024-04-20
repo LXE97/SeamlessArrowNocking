@@ -17,15 +17,13 @@ namespace arrownock
 
 	extern PapyrusVRAPI*      g_papyrusvr;
 	extern bool               g_left_hand_mode;
-	extern float              g_overlap_radius;
-	extern PapyrusVR::Vector3 g_overlap_offset;
 	extern bool               g_debug_print;
 
-	void StartMod();
+	void Init();
 
 	void OnGameLoad();
 
-	void OnPoseUpdate();
+	void OnUpdate();
 
 	void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn);
 
@@ -33,16 +31,16 @@ namespace arrownock
 
 	bool OnButtonEvent(const vrinput::ModInputEvent& e);
 
-	void OnOverlap(bool entered);
+	bool IsOverlapping();
 
 	bool IsArrowNocked();
 
 	void GetBowBaseAngle(RE::NiPoint3* out);
 
-	void TryNockArrow();
+	void TryNockArrow(bool a_start_spoof);
 
-	void UnregisterButtons();
-	void RegisterButtons();
+	void UnregisterButtons(bool isLeft);
+	void RegisterButtons(bool isLeft);
 
 	void RegisterVRInputCallback();
 
