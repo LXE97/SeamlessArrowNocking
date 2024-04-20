@@ -19,11 +19,11 @@ namespace arrownock
 	extern bool               g_left_hand_mode;
 	extern bool               g_debug_print;
 
-	void StartMod();
+	void Init();
 
 	void OnGameLoad();
 
-	void OnPoseUpdate();
+	void OnUpdate();
 
 	void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn);
 
@@ -31,9 +31,7 @@ namespace arrownock
 
 	bool OnButtonEvent(const vrinput::ModInputEvent& e);
 
-	void OnOverlap(bool entered);
-
-	void CheckOverlap();
+	bool IsOverlapping();
 
 	bool IsArrowNocked();
 
@@ -41,8 +39,8 @@ namespace arrownock
 
 	void TryNockArrow(bool a_start_spoof);
 
-	void UnregisterButtons();
-	void RegisterButtons();
+	void UnregisterButtons(bool isLeft);
+	void RegisterButtons(bool isLeft);
 
 	void RegisterVRInputCallback();
 
