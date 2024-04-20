@@ -201,7 +201,7 @@ namespace vrinput
 	* see https://github.com/SkyrimAlternativeDevelopers/SkyrimVRTools/blob/master/src/hooks/HookVRSystem.cpp#L91
 	* Writes to all 3 copies of the controller state so that proceeding input callbacks don't overwrite our changes
 	* by default. That means other mods may or may not see the fake button presses depending on the order in which
-	* the callbacks are processed, and if they do, they may choose to clear them.
+	* the callbacks are processed, and if they do, they may clear them.
 	*/
 	struct AsmSetControllerButtons : Xbyak::CodeGenerator
 	{
@@ -306,8 +306,8 @@ namespace vrinput
 				auto local_trigger = pControllerState->rAxis[1].x;
 
 				// momentary button spoofing
-				if ((isLeft && !fake_event_queue_left.empty()) ||
-					(!isLeft && !fake_event_queue_right.empty()))
+				if ((!fake_event_queue_left.empty() && isLeft) ||
+					(!fake_event_queue_right.empty() && !isLeft))
 				{
 					static std::deque<std::pair<ModInputEvent, vr::EVRButtonId>>* spoof_queue;
 					spoof_queue = isLeft ? &fake_event_queue_left : &fake_event_queue_right;
@@ -383,6 +383,24 @@ namespace vrinput
 		return true;
 	}
 
+	bool                         overlapping = false;
+	PapyrusVR::TrackedDevicePose bow;
+	PapyrusVR::TrackedDevicePose arrow;
+
+	// handles device poses
+	vr::EVRCompositorError ControllerPoseCallback(VR_ARRAY_COUNT(unRenderPoseArrayCount)
+													  vr::TrackedDevicePose_t* pRenderPoseArray,
+		uint32_t                                                      unRenderPoseArrayCount,
+		VR_ARRAY_COUNT(unGamePoseArrayCount) vr::TrackedDevicePose_t* pGamePoseArray,
+		uint32_t                                                      unGamePoseArrayCount)
+	{
+		using namespace PapyrusVR;
+
+		arrownock::CheckOverlap();
+
+		return vr::EVRCompositorError::VRCompositorError_None;
+	}
+
 	RE::NiTransform HmdMatrixToNiTransform(const HmdMatrix34_t& hmdMatrix)
 	{
 		RE::NiTransform niTransform;
@@ -417,57 +435,5 @@ namespace vrinput
 		hmdMatrix.m[2][3] = niTransform.translate.z;
 
 		return hmdMatrix;
-	}
-
-	bool                         overlapping = false;
-	PapyrusVR::TrackedDevicePose bow;
-	PapyrusVR::TrackedDevicePose arrow;
-
-	// handles device poses
-	vr::EVRCompositorError ControllerPoseCallback(VR_ARRAY_COUNT(unRenderPoseArrayCount)
-													  vr::TrackedDevicePose_t* pRenderPoseArray,
-		uint32_t                                                      unRenderPoseArrayCount,
-		VR_ARRAY_COUNT(unGamePoseArrayCount) vr::TrackedDevicePose_t* pGamePoseArray,
-		uint32_t                                                      unGamePoseArrayCount)
-	{
-		using namespace PapyrusVR;
-		if (pGamePoseArray[g_rightcontroller].bPoseIsValid)
-		{
-			// compute overlap
-			auto bow_device = arrownock::g_left_hand_mode ? g_rightcontroller : g_leftcontroller;
-			auto arrow_device = arrownock::g_left_hand_mode ? g_leftcontroller : g_rightcontroller;
-
-			std::memcpy(&bow, pGamePoseArray + bow_device, sizeof(PapyrusVR::TrackedDevicePose));
-			std::memcpy(
-				&arrow, pGamePoseArray + arrow_device, sizeof(PapyrusVR::TrackedDevicePose));
-
-			auto nock_location = bow.mDeviceToAbsoluteTracking * arrownock::g_overlap_offset;
-			auto arrow_hand_location = arrow.mDeviceToAbsoluteTracking * Vector3();
-
-			auto distance = arrow_hand_location - nock_location;
-
-			if (distance.lengthSquared() < arrownock::g_overlap_radius)
-			{
-				arrownock::OnPoseUpdate();
-
-				if (!overlapping)
-				{
-					_DEBUGLOG("overlap: ENTER");
-					overlapping = true;
-					arrownock::OnOverlap(true);
-				}
-			}
-			else
-			{
-				if (overlapping)
-				{
-					_DEBUGLOG("overlap: EXIT");
-					overlapping = false;
-					arrownock::OnOverlap(false);
-				}
-			}
-		}
-
-		return vr::EVRCompositorError::VRCompositorError_None;
 	}
 }

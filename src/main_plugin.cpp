@@ -4,36 +4,41 @@
 
 namespace arrownock
 {
-	constexpr float      kArrowDistanceToNockDefault = 18.f;
-	constexpr float      kOverlapRadiusDefault = 0.240;
 	constexpr std::array kCheckButtons{ vr::k_EButton_SteamVR_Trigger, vr::k_EButton_A,
 		vr::k_EButton_Knuckles_B, vr::k_EButton_SteamVR_Touchpad, vr::k_EButton_Grip };
 
 	PapyrusVRAPI* g_papyrusvr;
-	bool          g_vrik_disabled = true;
 
+	// user settings
+	bool            g_debug_print = false;
+	vr::EVRButtonId g_firebutton = vr::EVRButtonId::k_EButton_SteamVR_Trigger;
+	int             g_grace_period_ms = 500;
 	// settings
-	bool               g_left_hand_mode = false;
-	float              g_overlap_radius = 0.1f;
-	PapyrusVR::Vector3 g_overlap_offset = { 0, 0.1, 0.05 };
-	bool               g_debug_print = false;
-	vr::EVRButtonId    g_firebutton = vr::EVRButtonId::k_EButton_SteamVR_Trigger;
-	int                g_grace_period_ms = 500;
-
+	bool  g_left_hand_mode = false;
+	float g_overlap_radius = 0.1f;
 	float g_angle_diff_threshold = 0.005f;
-	int   g_frames_between_attempts = 3;
+	int   g_frames_between_attempts = 2;
 
 	// state
 	bool            g_want_arrow_nocked = false;
 	bool            g_arrow_held = false;
 	vr::EVRButtonId g_arrow_held_button = vr::EVRButtonId::k_EButton_Max;
 	RE::NiPoint3    g_unbent_bow_angle;
+	bool            g_vrik_disabled = true;
 
 	void StartMod()
 	{
 		g_vrik_disabled = GetModuleHandleA("vrik") == NULL;
-		ReadConfig(g_ini_path);
 		SKSE::log::info("VRIK {} found", g_vrik_disabled ? "not" : "DLL");
+
+		ReadConfig(g_ini_path);
+
+		g_left_hand_mode = RE::GetINISetting("bLeftHandedMode:VRInput")->GetBool();
+		g_overlap_radius = RE::GetINISetting("fArrowDistanceToNock:VRWand")->GetFloat();
+		SKSE::log::info(
+			"Left hand mode: {}\n fArrowDistanceToNock: {}", g_left_hand_mode, g_overlap_radius);
+		g_overlap_radius *= 0.9f;
+		g_overlap_radius *= g_overlap_radius;
 
 		auto equip_sink = EventSink<RE::TESEquipEvent>::GetSingleton();
 		equip_sink->AddCallback(OnEquipped);
@@ -55,26 +60,31 @@ namespace arrownock
 		g_arrow_held_button = vr::EVRButtonId::k_EButton_Max;
 	}
 
-	void OnPoseUpdate()
+	void OnPoseUpdate(long count)
 	{
-		if (!menuchecker::isGameStopped() && g_want_arrow_nocked)
+		if (g_want_arrow_nocked)
 		{
-			static int frame_count = 0;
-			if (frame_count++ % g_frames_between_attempts == 0)
+			static bool toggle = false;
+			if (count == 0)
+			{  // first time we're trying to nock this arrow
+				toggle = true;
+				TryNockArrow(true);
+			}
+			else if (count % g_frames_between_attempts == 0)
 			{
 				if (IsArrowNocked()) { g_want_arrow_nocked = false; }
-
-				else { TryNockArrow(); }
+				else
+				{
+					toggle ^= 1;
+					TryNockArrow(toggle);
+				}
 			}
 		}
 	}
 
 	void OnOverlap(bool entered)
 	{
-		if (entered && g_arrow_held && !menuchecker::isGameStopped())
-		{
-			g_want_arrow_nocked = true;
-		}
+		if (entered && !IsArrowNocked()) { g_want_arrow_nocked = true; }
 		else if (!entered) { g_want_arrow_nocked = false; }
 	}
 
@@ -138,6 +148,7 @@ namespace arrownock
 				vrinput::ClearAllFake();
 
 				g_arrow_held = false;
+				g_want_arrow_nocked = false;
 
 				if (IsArrowNocked())
 				{
@@ -171,12 +182,41 @@ namespace arrownock
 	{
 		if (!evn->opening && std::strcmp(evn->menuName.data(), "Journal Menu") == 0)
 		{
-			if (ReadConfig(g_ini_path))
+			ReadConfig(g_ini_path);
+		}
+	}
+
+	void CheckOverlap()
+	{
+		static long overlapping_duration = 0;
+		if (auto pcvr = RE::PlayerCharacter::GetSingleton()->GetVRNodeData())
+		{
+			if (!menuchecker::isGameStopped() && g_arrow_held)
 			{
-				// re-register buttons in case left handed mode changed
-				UnregisterButtons();
-				RegisterButtons();
-				g_unbent_bow_angle = RE::NiPoint3();
+				// compute overlap
+				auto bow_node = pcvr->ArrowSnapNode;
+				auto arrow_node = g_left_hand_mode ? pcvr->LeftWandNode : pcvr->RightWandNode;
+
+				if ((arrow_node->world.translate - bow_node->world.translate).SqrLength() <
+					arrownock::g_overlap_radius)
+				{
+					if (overlapping_duration == 0)
+					{
+						_DEBUGLOG("overlap: ENTER");
+						arrownock::OnOverlap(true);
+					}
+
+					arrownock::OnPoseUpdate(overlapping_duration++);
+				}
+				else
+				{
+					if (overlapping_duration)
+					{
+						_DEBUGLOG("overlap: EXIT");
+						overlapping_duration = 0;
+						arrownock::OnOverlap(false);
+					}
+				}
 			}
 		}
 	}
@@ -212,31 +252,10 @@ namespace arrownock
 		return false;
 	}
 
-	void TryNockArrow()
+	void FakeButtonPress(bool a_start_spoof)
 	{
-		static bool fake_button_down = false;
-
-		if (fake_button_down)
-		{  // reset button so we can try again in a few frames
-			if (g_arrow_held_button != vr::k_EButton_SteamVR_Trigger)
-			{
-				vrinput::ClearFakeButtonState({
-					.device = g_left_hand_mode ? vrinput::Hand::kLeft : vrinput::Hand::kRight,
-					.touch_or_press = vrinput::ActionType::kPress,
-					.button_state = vrinput::ButtonState::kButtonDown,
-					.button_ID = vr::k_EButton_SteamVR_Trigger,
-				});
-				vrinput::ClearFakeButtonState({
-					.device = g_left_hand_mode ? vrinput::Hand::kLeft : vrinput::Hand::kRight,
-					.touch_or_press = vrinput::ActionType::kTouch,
-					.button_state = vrinput::ButtonState::kButtonDown,
-					.button_ID = vr::k_EButton_SteamVR_Trigger,
-				});
-			}
-			fake_button_down = false;
-		}
-		else
-		{  // start spoofing
+		if (a_start_spoof)
+		{
 			if (g_arrow_held_button == vr::k_EButton_SteamVR_Trigger)
 			{
 				vrinput::SendFakeInputEvent(
@@ -260,7 +279,24 @@ namespace arrownock
 					.button_ID = vr::k_EButton_SteamVR_Trigger,
 				});
 			}
-			fake_button_down = true;
+		}
+		else
+		{  // reset button so we can try again in a few frames
+			if (g_arrow_held_button != vr::k_EButton_SteamVR_Trigger)
+			{
+				vrinput::ClearFakeButtonState({
+					.device = g_left_hand_mode ? vrinput::Hand::kLeft : vrinput::Hand::kRight,
+					.touch_or_press = vrinput::ActionType::kPress,
+					.button_state = vrinput::ButtonState::kButtonDown,
+					.button_ID = vr::k_EButton_SteamVR_Trigger,
+				});
+				vrinput::ClearFakeButtonState({
+					.device = g_left_hand_mode ? vrinput::Hand::kLeft : vrinput::Hand::kRight,
+					.touch_or_press = vrinput::ActionType::kTouch,
+					.button_state = vrinput::ButtonState::kButtonDown,
+					.button_ID = vr::k_EButton_SteamVR_Trigger,
+				});
+			}
 		}
 	}
 
@@ -325,20 +361,8 @@ namespace arrownock
 				if (config.is_open())
 				{
 					g_firebutton = (vr::EVRButtonId)helper::ReadIntFromIni(config, "FireButtonID");
-
-					auto ArrowDistanceToNock =
-						helper::ReadFloatFromIni(config, "fArrowDistanceToNock");
-					g_overlap_radius = std::powf(
-						(ArrowDistanceToNock / kArrowDistanceToNockDefault) * kOverlapRadiusDefault,
-						2);
-
 					g_debug_print = helper::ReadIntFromIni(config, "Debug");
 					g_grace_period_ms = helper::ReadIntFromIni(config, "iGracePeriod");
-					g_left_hand_mode = helper::ReadIntFromIni(config, "iLeftHandedMode");
-					g_frames_between_attempts =
-						helper::ReadIntFromIni(config, "iFramesBetweenNockAttempts");
-
-					_DEBUGLOG("g_overlap_radius : {}", g_overlap_radius);
 
 					config.close();
 					last_read = last_write_time(config_path);
