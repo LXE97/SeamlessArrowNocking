@@ -27,7 +27,7 @@ namespace arrownock
 	int             g_grace_period_ms = 500;
 	// settings
 	bool  g_left_hand_mode = false;
-	float g_overlap_radius = 0.1f;
+	float g_overlap_radius = 18.f;
 	float g_angle_diff_threshold = 0.005f;
 	int   g_frames_between_attempts = 4;
 	bool  g_vrik_disabled = true;
@@ -79,7 +79,7 @@ namespace arrownock
 
 	void OnEquipped(const RE::TESEquipEvent* event)
 	{
-		if (event->actor.get() == RE::PlayerCharacter::GetSingleton() &&
+		if (event && event->actor && event->actor.get() == RE::PlayerCharacter::GetSingleton() &&
 			!menuchecker::isGameStopped())
 		{
 			switch (g_state)
@@ -366,8 +366,16 @@ namespace arrownock
 
 		UnregisterButtons(g_left_hand_mode);
 
-		g_left_hand_mode = RE::GetINISetting("bLeftHandedMode:VRInput")->GetBool();
-		g_overlap_radius = RE::GetINISetting("fArrowDistanceToNock:VRWand")->GetFloat();
+		if (auto setting = RE::GetINISetting("bLeftHandedMode:VRInput"))
+		{
+			g_left_hand_mode = setting->GetBool();
+		}
+
+		if (auto setting = RE::GetINISetting("fArrowDistanceToNock:VRWand"))
+		{
+			g_overlap_radius = setting->GetFloat();
+		}
+
 		SKSE::log::info(
 			"bLeftHandedMode: {}\n fArrowDistanceToNock: {}", g_left_hand_mode, g_overlap_radius);
 		g_overlap_radius *= 0.9f;

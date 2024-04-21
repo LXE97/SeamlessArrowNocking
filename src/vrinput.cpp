@@ -315,29 +315,29 @@ namespace vrinput
 					static std::deque<std::pair<ModInputEvent, vr::EVRButtonId>>* spoof_queue;
 					spoof_queue = isLeft ? &fake_event_queue_left : &fake_event_queue_right;
 
-					//do {
-					auto&     event = spoof_queue->front();
-					uint64_t* state = event.first.touch_or_press == ActionType::kPress ?
-						&(pOutputControllerState->ulButtonPressed) :
-						&(pOutputControllerState->ulButtonTouched);
+					do {
+						auto&     event = spoof_queue->front();
+						uint64_t* state = event.first.touch_or_press == ActionType::kPress ?
+							&(pOutputControllerState->ulButtonPressed) :
+							&(pOutputControllerState->ulButtonTouched);
 
-					*state = event.first.button_state == ButtonState::kButtonDown ?
-						*state | 1ull << event.second :
-						*state & ~(1ull << event.second);
+						*state = event.first.button_state == ButtonState::kButtonDown ?
+							*state | 1ull << event.second :
+							*state & ~(1ull << event.second);
 
-					if (event.second == k_EButton_SteamVR_Trigger)
-					{
-						if (event.first.button_state == ButtonState::kButtonDown &&
-							event.first.touch_or_press == ActionType::kPress)
+						if (event.second == k_EButton_SteamVR_Trigger)
 						{
-							local_trigger = 1.f;
+							if (event.first.button_state == ButtonState::kButtonDown &&
+								event.first.touch_or_press == ActionType::kPress)
+							{
+								local_trigger = 1.f;
+							}
+							else { local_trigger = 0.f; }
 						}
-						else { local_trigger = 0.f; }
-					}
 
-					spoof_queue->pop_front();
+						spoof_queue->pop_front();
 
-					//} while (!spoof_queue->empty());
+					} while (!spoof_queue->empty());
 				}
 
 				// hold button spoofing
