@@ -37,6 +37,84 @@ namespace arrownock
 	RE::NiPoint3    g_unbent_bow_angle;
 	vr::EVRButtonId g_arrow_held_button = vr::EVRButtonId::k_EButton_Max;
 
+	// DEBUG
+
+	std::vector<RE::FormID> visuals = { 0xabf02, 0x6b10f };
+
+	std::vector<std::string> sounds = { "WPNSwingUnarmed", "MAGFailSD", "DRScCrateCloseSD" };
+
+	bool DEBUGBUTTON(const vrinput::ModInputEvent& e)
+	{
+		static int c = 0;
+		auto       pc = RE::PlayerCharacter::GetSingleton();
+		if (pc && e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			if (auto hand = vrinput::GetHandNode((vrinput::Hand)!g_left_hand_mode, g_vrik_disabled))
+			{
+				if (auto artform = RE::TESForm::LookupByID(visuals[c++ % visuals.size()]);
+					artform && artform->GetFormType() == RE::FormType::ArtObject)
+				{
+					pc->ApplyArtObject(
+						artform->As<RE::BGSArtObject>(), 1, nullptr, false, false, hand);
+				}
+			}
+		}
+
+		return false;
+	}
+
+	RE::BSSoundHandle sound;
+
+	bool DEBUGBUTTON2(const vrinput::ModInputEvent& e)
+	{
+		static int c = 0;
+		if (auto pc = RE::PlayerCharacter::GetSingleton() &&
+				e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			if (auto hand = vrinput::GetHandNode((vrinput::Hand)g_left_hand_mode, g_vrik_disabled))
+			{
+				SKSE::log::trace("sound ID {} sound state {}", sound.soundID, sound.IsPlaying());
+
+				auto man = RE::BSAudioManager::GetSingleton();
+				man->BuildSoundDataFromEditorID(sound, sounds[c++ % sounds.size()].c_str(), 0x10);
+				sound.SetPosition(hand->world.translate);
+				sound.SetObjectToFollow(hand);
+				sound.SetVolume(1.f);
+				sound.Play();
+
+				SKSE::log::trace(
+					"sound ID {} sound state {} volume {}", sound.soundID, sound.IsPlaying(), c);
+			}
+		}
+
+		return false;
+	}
+
+	bool DEBUGBUTTON3(const vrinput::ModInputEvent& e)
+	{
+		static int c = 0;
+		if (auto pc = RE::PlayerCharacter::GetSingleton() &&
+				e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			if (auto hand = vrinput::GetHandNode((vrinput::Hand)g_left_hand_mode, g_vrik_disabled))
+			{
+				SKSE::log::trace("sound ID {} sound state {}", sound.soundID, sound.IsPlaying());
+
+				//auto man = RE::BSAudioManager::GetSingleton();
+				//man->BuildSoundDataFromEditorID(sound, sounds[c++ % sounds.size()].c_str(), 0x10);
+
+				helper::InitializeSound(sound, sounds[c++ % sounds.size()].c_str());
+
+				helper::PlaySound(sound, 1.f, hand->world.translate, hand);
+
+				SKSE::log::trace(
+					"sound ID {} sound state {} volume {}", sound.soundID, sound.IsPlaying(), c);
+			}
+		}
+
+		return false;
+	}
+
 	inline void StateTransition(ArrowState a_next_state)
 	{
 		_DEBUGLOG("STATE CHANGE:  {} to {}", (int)g_state, (int)a_next_state);
@@ -60,6 +138,11 @@ namespace arrownock
 
 		menuchecker::begin();
 		RegisterVRInputCallback();
+
+		vrinput::AddCallback(DEBUGBUTTON2, vr::EVRButtonId::k_EButton_A, vrinput::Hand::kRight,
+			vrinput::ActionType::kPress);
+		vrinput::AddCallback(DEBUGBUTTON3, vr::EVRButtonId::k_EButton_Knuckles_B,
+			vrinput::Hand::kRight, vrinput::ActionType::kPress);
 	}
 
 	void OnGameLoad()

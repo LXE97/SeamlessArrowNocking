@@ -14,7 +14,7 @@ namespace vrinput
 		vr::k_EButton_Knuckles_B,
 		vr::k_EButton_Grip,
 		vr::k_EButton_A,
-		vr::k_EButton_SteamVR_Touchpad, // this is the joystick for index  check oculus
+		vr::k_EButton_SteamVR_Touchpad,  // this is the joystick for index  check oculus
 		vr::k_EButton_SteamVR_Trigger,
 	};
 
@@ -86,9 +86,12 @@ namespace vrinput
 
 	inline RE::NiAVObject* GetHandNode(Hand a_hand, bool a_first_person)
 	{
-		return RE::PlayerCharacter::GetSingleton()
-			->Get3D(a_first_person)
-			->GetObjectByName(a_hand == Hand::kRight ? kRightHandNodeName : kLeftHandNodeName);
+		if (auto pc3d = RE::PlayerCharacter::GetSingleton()->Get3D(a_first_person))
+		{
+			return pc3d->GetObjectByName(
+				a_hand == Hand::kRight ? kRightHandNodeName : kLeftHandNodeName);
+		}
+		return nullptr;
 	}
 
 	/* Adds a function to the list of callbacks for a specific button. The callback will be triggered

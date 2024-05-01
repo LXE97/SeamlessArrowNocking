@@ -262,4 +262,22 @@ namespace helper
 
 		return 0;
 	}
+
+	bool InitializeSound(BSSoundHandle& a_handle, std::string a_editorID)
+	{
+		auto man = BSAudioManager::GetSingleton();
+		man->BuildSoundDataFromEditorID(a_handle, a_editorID.c_str(), 0x10);
+		return a_handle.IsValid();
+	}
+
+	bool PlaySound(BSSoundHandle& a_handle, float a_volume, RE::NiPoint3& a_position,
+		RE::NiAVObject* a_follow_node)
+	{
+		a_handle.SetPosition(a_position);
+		a_handle.SetObjectToFollow(a_follow_node);
+		a_handle.SetVolume(a_volume);
+		a_handle.Play();
+		return a_handle.IsPlaying();
+	}
+
 }
