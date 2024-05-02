@@ -21,104 +21,44 @@ namespace arrownock
 
 	PapyrusVRAPI* g_papyrusvr;
 
-	// user settings
+	// user settings, documented in .ini
+	bool            g_enable_nocking = true;
+	bool            g_stamina_autorecover = true;
 	bool            g_debug_print = false;
 	vr::EVRButtonId g_firebutton = vr::EVRButtonId::k_EButton_SteamVR_Trigger;
 	int             g_grace_period_ms = 500;
+	float           g_stamina_threshold = 0.f;
+	float           g_stamina_haptic_strength = 1.f;
+	int             g_stamina_visual_idx = 2;
+	std::string     g_stamina_sound_editorID;
+
 	// settings
-	bool  g_left_hand_mode = false;
-	float g_overlap_radius = 18.f;
-	float g_angle_diff_threshold = 0.005f;
-	int   g_frames_between_attempts = 4;
-	bool  g_vrik_disabled = true;
+	bool              g_left_hand_mode = false;
+	float             g_overlap_radius = 18.f;
+	float             g_angle_diff_threshold = 0.005f;
+	int               g_frames_between_attempts = 4;
+	bool              g_vrik_disabled = true;
+	RE::BSSoundHandle g_stamina_sound;
 
 	// state
 	ArrowState      g_state = ArrowState::kIdle;
 	RE::NiPoint3    g_unbent_bow_angle;
 	vr::EVRButtonId g_arrow_held_button = vr::EVRButtonId::k_EButton_Max;
 
-	// DEBUG
-
-	std::vector<RE::FormID> visuals = { 0xabf02, 0x6b10f };
-
-	std::vector<std::string> sounds = { "WPNSwingUnarmed", "MAGFailSD", "DRScCrateCloseSD" };
-
-	bool DEBUGBUTTON(const vrinput::ModInputEvent& e)
-	{
-		static int c = 0;
-		auto       pc = RE::PlayerCharacter::GetSingleton();
-		if (pc && e.button_state == vrinput::ButtonState::kButtonDown)
-		{
-			if (auto hand = vrinput::GetHandNode((vrinput::Hand)!g_left_hand_mode, g_vrik_disabled))
-			{
-				if (auto artform = RE::TESForm::LookupByID(visuals[c++ % visuals.size()]);
-					artform && artform->GetFormType() == RE::FormType::ArtObject)
-				{
-					pc->ApplyArtObject(
-						artform->As<RE::BGSArtObject>(), 1, nullptr, false, false, hand);
-				}
-			}
-		}
-
-		return false;
-	}
-
-	RE::BSSoundHandle sound;
-
-	bool DEBUGBUTTON2(const vrinput::ModInputEvent& e)
-	{
-		static int c = 0;
-		if (auto pc = RE::PlayerCharacter::GetSingleton() &&
-				e.button_state == vrinput::ButtonState::kButtonDown)
-		{
-			if (auto hand = vrinput::GetHandNode((vrinput::Hand)g_left_hand_mode, g_vrik_disabled))
-			{
-				SKSE::log::trace("sound ID {} sound state {}", sound.soundID, sound.IsPlaying());
-
-				auto man = RE::BSAudioManager::GetSingleton();
-				man->BuildSoundDataFromEditorID(sound, sounds[c++ % sounds.size()].c_str(), 0x10);
-				sound.SetPosition(hand->world.translate);
-				sound.SetObjectToFollow(hand);
-				sound.SetVolume(1.f);
-				sound.Play();
-
-				SKSE::log::trace(
-					"sound ID {} sound state {} volume {}", sound.soundID, sound.IsPlaying(), c);
-			}
-		}
-
-		return false;
-	}
-
-	bool DEBUGBUTTON3(const vrinput::ModInputEvent& e)
-	{
-		static int c = 0;
-		if (auto pc = RE::PlayerCharacter::GetSingleton() &&
-				e.button_state == vrinput::ButtonState::kButtonDown)
-		{
-			if (auto hand = vrinput::GetHandNode((vrinput::Hand)g_left_hand_mode, g_vrik_disabled))
-			{
-				SKSE::log::trace("sound ID {} sound state {}", sound.soundID, sound.IsPlaying());
-
-				//auto man = RE::BSAudioManager::GetSingleton();
-				//man->BuildSoundDataFromEditorID(sound, sounds[c++ % sounds.size()].c_str(), 0x10);
-
-				helper::InitializeSound(sound, sounds[c++ % sounds.size()].c_str());
-
-				helper::PlaySound(sound, 1.f, hand->world.translate, hand);
-
-				SKSE::log::trace(
-					"sound ID {} sound state {} volume {}", sound.soundID, sound.IsPlaying(), c);
-			}
-		}
-
-		return false;
-	}
+	// resources
+	constexpr std::array<RE::FormID, 2> kvisuals{ 0xabf02, 0x6b10f };
+	std::vector<uint16_t> khaptic_keyframes = { 3875, 3875, 3875, 3875, 3875, 3875, 3875, 3875,
+		3875, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3875, 3875, 3875, 3875, 3875, 3875, 3875,
+		3875, 3875, 3750, 3625, 3500, 3250, 2875, 2375, 2000, 1625, 1250, 1000, 750, 625, 375, 375,
+		250, 125, 125 };
 
 	inline void StateTransition(ArrowState a_next_state)
 	{
-		_DEBUGLOG("STATE CHANGE:  {} to {}", (int)g_state, (int)a_next_state);
-		g_state = a_next_state;
+		if (g_enable_nocking)
+		{
+			_DEBUGLOG("STATE CHANGE:  {} to {}", (int)g_state, (int)a_next_state);
+			g_state = a_next_state;
+		}
 	}
 
 	void Init()
@@ -138,11 +78,6 @@ namespace arrownock
 
 		menuchecker::begin();
 		RegisterVRInputCallback();
-
-		vrinput::AddCallback(DEBUGBUTTON2, vr::EVRButtonId::k_EButton_A, vrinput::Hand::kRight,
-			vrinput::ActionType::kPress);
-		vrinput::AddCallback(DEBUGBUTTON3, vr::EVRButtonId::k_EButton_Knuckles_B,
-			vrinput::Hand::kRight, vrinput::ActionType::kPress);
 	}
 
 	void OnGameLoad()
@@ -272,29 +207,87 @@ namespace arrownock
 			}
 		}
 
+		// Stamina Inhibitor Feature - manual nocking
+		if (e.button_ID == g_firebutton && e.button_state == vrinput::ButtonState::kButtonDown &&
+			g_stamina_threshold > 0.f)
+		{
+			if (!TestStamina(g_stamina_threshold))
+			{
+				if (auto weap =
+						RE::PlayerCharacter::GetSingleton()->GetEquippedObject(!g_left_hand_mode);
+					weap && weap->IsWeapon() && weap->As<RE::TESObjectWEAP>()->IsBow())
+				{
+					if (auto ammo = RE::PlayerCharacter::GetSingleton()->GetCurrentAmmo();
+						ammo && !ammo->IsBolt())
+					{
+						if (IsOverlapping(arrownock::g_overlap_radius * 1.05))
+						{
+							// Player is attemping to fire a bow with not enough stamina, block the trigger press
+							PlayStaminaInhibitorFX();
+							_DEBUGLOG("Manual arrow firing blocked, stamina: {}",
+								helper::GetAVPercent(
+									RE::PlayerCharacter::GetSingleton(), RE::ActorValue::kStamina));
+							return true;
+						}
+					}
+				}
+			}
+		}
+
 		return false;
 	}
 
 	void OnUpdate()
 	{
 		static bool fake_button_down = false;
-		static int  frame_count = 0;
+		static bool stamina_blocked = false;
+		static int  frame_count = 1000;
+
 		switch (g_state)
 		{
 		case ArrowState::kIdle:
 			break;
 		case ArrowState::kArrowHeld:
-			if (IsOverlapping())
+			if (IsOverlapping(g_overlap_radius * 0.95))
 			{
-				fake_button_down = true;
-				frame_count = 0;
-				TryNockArrow(true);
-				StateTransition(ArrowState::kTryToNock);
+				if (!stamina_blocked)
+				{
+					// Stamina Inhibitor Feature: block auto nocking
+					if (g_stamina_threshold > 0.f && !TestStamina(g_stamina_threshold))
+					{
+						// Player is attemping to fire a bow with not enough stamina
+						PlayStaminaInhibitorFX();
+
+						// Set the flag that indicates player must move out of overlap zone to reset the stamina block
+						if (!g_stamina_autorecover) { stamina_blocked = true; }
+
+						_DEBUGLOG("Auto arrow nocking blocked, stamina: {} ({}%) ",
+							RE::PlayerCharacter::GetSingleton()->AsActorValueOwner()->GetActorValue(
+								RE::ActorValue::kStamina),
+							helper::GetAVPercent(
+								RE::PlayerCharacter::GetSingleton(), RE::ActorValue::kStamina));
+					}
+					else
+					{
+						fake_button_down = true;
+						frame_count = 0;
+						TryNockArrow(true);
+						StateTransition(ArrowState::kTryToNock);
+					}
+				}
 			}
+			// stamina inhibitor: unblock autonocking when player moves out of overlap zone,
+			// even if stamina has not recovered we'll check it again and repeat the FX next
+			// time they try
+			else if (stamina_blocked) { stamina_blocked = false; }
+
 			break;
 		case ArrowState::kTryToNock:
 			if (IsArrowNocked()) { StateTransition(ArrowState::kArrowNocked); }
-			else if (!IsOverlapping()) { StateTransition(ArrowState::kArrowHeld); }
+			else if (!IsOverlapping(g_overlap_radius * 0.95))
+			{
+				StateTransition(ArrowState::kArrowHeld);
+			}
 			else if (++frame_count % g_frames_between_attempts == 0)
 			{
 				fake_button_down ^= 1;
@@ -307,9 +300,8 @@ namespace arrownock
 		}
 	}
 
-	bool IsOverlapping()
+	bool IsOverlapping(float a_radius_squared)
 	{
-		static long overlapping_duration = 0;
 		if (auto pcvr = RE::PlayerCharacter::GetSingleton()->GetVRNodeData())
 		{
 			// compute overlap
@@ -317,7 +309,7 @@ namespace arrownock
 			auto arrow_node = g_left_hand_mode ? pcvr->LeftWandNode : pcvr->RightWandNode;
 
 			return (arrow_node->world.translate - bow_node->world.translate).SqrLength() <
-				arrownock::g_overlap_radius;
+				a_radius_squared;
 		}
 		return false;
 	}
@@ -396,6 +388,95 @@ namespace arrownock
 		}
 	}
 
+	void PlayStaminaInhibitorFX()
+	{
+		constexpr int                                kMinFXInterval = 1000;
+		static std::chrono::steady_clock::time_point last_played = {};
+
+		auto now = std::chrono::steady_clock::now();
+
+		if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_played).count() >
+			kMinFXInterval)
+		{
+			last_played = now;
+
+			auto pc = RE::PlayerCharacter::GetSingleton();
+			auto node = pc->Get3D(g_vrik_disabled)->GetObjectByName("NPC L Finger10 [LF10]");
+
+			// Controller vibration
+			if (g_stamina_haptic_strength > 0.f)
+			{
+				_DEBUGLOG("Activating haptics");
+				vrinput::Vibrate(!g_left_hand_mode, &khaptic_keyframes, g_stamina_haptic_strength);
+			}
+			// Sound Effect
+			if (!g_stamina_sound_editorID.empty() &&
+				std::strcmp(g_stamina_sound_editorID.c_str(), "none") &&
+				std::strcmp(g_stamina_sound_editorID.c_str(), ""))
+			{
+				if (node)
+				{
+					if (!g_stamina_sound_editorID.empty() &&
+						std::strcmp(g_stamina_sound_editorID.c_str(), "none"))
+					{
+						if (auto sound_success =
+								helper::InitializeSound(g_stamina_sound, g_stamina_sound_editorID))
+						{
+							_DEBUGLOG("Playing sound '{}' : ", g_stamina_sound_editorID,
+								sound_success ? "success" : "failed");
+							helper::PlaySound(g_stamina_sound, 1.f,
+								pc->Get3D(g_vrik_disabled)->world.translate,
+								pc->Get3D(g_vrik_disabled));
+						}
+						else
+						{
+							SKSE::log::error("invalid editor ID : {}", g_stamina_sound_editorID);
+						}
+					}
+				}
+			}
+			// Visual Effect
+			if (g_stamina_visual_idx)
+			{
+				if (node)
+				{
+					if (auto artform = RE::TESForm::LookupByID(kvisuals[g_stamina_visual_idx - 1]);
+						artform && artform->GetFormType() == RE::FormType::ArtObject)
+					{
+						pc->ApplyArtObject(
+							artform->As<RE::BGSArtObject>(), 1, nullptr, false, false, node);
+						_DEBUGLOG("Applying art object with formid: {}",
+							kvisuals[g_stamina_visual_idx - 1]);
+					}
+				}
+			}
+		}
+		else { _DEBUGLOG("FX rate limit"); }
+	}
+
+	/* true: player has enough stamina */
+	bool TestStamina(float a_threshold)
+	{
+		if (a_threshold > 0.f)
+		{
+			float stam = 0;
+			if (a_threshold < 1.f)
+			{
+				// compare percentages
+				stam = helper::GetAVPercent(
+					RE::PlayerCharacter::GetSingleton(), RE::ActorValue::kStamina);
+			}
+			else
+			{
+				// compare flat values
+				stam = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner()->GetActorValue(
+					RE::ActorValue::kStamina);
+			}
+			return stam > a_threshold;
+		}
+		return true;
+	}
+
 	void RegisterButtons(bool isLeft)
 	{
 		for (auto b : kCheckButtons)
@@ -433,6 +514,8 @@ namespace arrownock
 					OVRHookManager->GetVRSystem()->GetTrackedDeviceIndexForControllerRole(
 						vr::TrackedControllerRole_RightHand);
 
+				vrinput::g_IVRSystem = OVRHookManager->GetVRSystem();
+
 				OVRHookManager->RegisterControllerStateCB(vrinput::ControllerInputCallback);
 				OVRHookManager->RegisterGetPosesCB(vrinput::ControllerPoseCallback);
 			}
@@ -461,7 +544,6 @@ namespace arrownock
 
 		SKSE::log::info(
 			"bLeftHandedMode: {}\n fArrowDistanceToNock: {}", g_left_hand_mode, g_overlap_radius);
-		g_overlap_radius *= 0.9f;
 		g_overlap_radius *= g_overlap_radius;
 
 		RegisterButtons(g_left_hand_mode);
@@ -475,10 +557,26 @@ namespace arrownock
 				std::ifstream config(config_path);
 				if (config.is_open())
 				{
+					g_enable_nocking = helper::ReadIntFromIni(config, "iEnableAutonocking");
 					g_firebutton = (vr::EVRButtonId)helper::ReadIntFromIni(config, "FireButtonID");
 					g_debug_print = helper::ReadIntFromIni(config, "Debug");
 					g_grace_period_ms = helper::ReadIntFromIni(config, "iGracePeriod");
-
+					g_stamina_threshold = helper::ReadFloatFromIni(config, "fStaminaThreshold");
+					if (g_stamina_threshold > 0.f)
+					{
+						g_stamina_autorecover =
+							helper::ReadIntFromIni(config, "iAutonockAfterBlocking");
+						g_stamina_haptic_strength =
+							helper::ReadFloatFromIni(config, "fHapticStrength");
+						g_stamina_visual_idx = helper::ReadIntFromIni(config, "iVisualEffect");
+						if (g_stamina_visual_idx < 0 || g_stamina_visual_idx > 2)
+						{
+							SKSE::log::trace("Invalid visual index, disabling");
+							g_stamina_visual_idx = 0;
+						}
+						g_stamina_sound_editorID =
+							helper::ReadStringFromIni(config, "sBlockedSound");
+					}
 					config.close();
 					last_read = last_write_time(config_path);
 					return true;

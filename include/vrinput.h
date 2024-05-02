@@ -131,6 +131,8 @@ namespace vrinput
 
 	void InitControllerHooks();
 
+	void Vibrate(bool isLeft, std::vector<uint16_t>* keyframes, float a_power = 1.f);
+
 	/* This needs to be fed to OVRHookManager::RegisterControllerStateCB() */
 	bool ControllerInputCallback(vr::TrackedDeviceIndex_t unControllerDeviceIndex,
 		const vr::VRControllerState_t* pControllerState, uint32_t unControllerStateSize,
@@ -145,5 +147,6 @@ namespace vrinput
 	extern vr::TrackedDeviceIndex_t g_leftcontroller;
 	extern vr::TrackedDeviceIndex_t g_rightcontroller;
 	extern float                    adjustable;
+	extern vr::IVRSystem*           g_IVRSystem;
 
 }

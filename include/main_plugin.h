@@ -15,9 +15,9 @@ namespace arrownock
 {
 	constexpr const char* g_ini_path = "SKSE/Plugins/SeamlessArrowNocking.ini";
 
-	extern PapyrusVRAPI*      g_papyrusvr;
-	extern bool               g_left_hand_mode;
-	extern bool               g_debug_print;
+	extern PapyrusVRAPI* g_papyrusvr;
+	extern bool          g_left_hand_mode;
+	extern bool          g_debug_print;
 
 	void Init();
 
@@ -31,13 +31,18 @@ namespace arrownock
 
 	bool OnButtonEvent(const vrinput::ModInputEvent& e);
 
-	bool IsOverlapping();
+	bool IsOverlapping(float a_radius_squared);
 
 	bool IsArrowNocked();
 
 	void GetBowBaseAngle(RE::NiPoint3* out);
 
 	void TryNockArrow(bool a_start_spoof);
+
+	void PlayStaminaInhibitorFX();
+
+	/* true: player has enough stamina */
+	bool TestStamina(float a_threshold);
 
 	void UnregisterButtons(bool isLeft);
 	void RegisterButtons(bool isLeft);
