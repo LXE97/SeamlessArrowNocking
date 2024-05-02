@@ -27,6 +27,8 @@ namespace arrownock
 	bool            g_debug_print = false;
 	vr::EVRButtonId g_firebutton = vr::EVRButtonId::k_EButton_SteamVR_Trigger;
 	int             g_grace_period_ms = 500;
+	bool            g_stamina_use_health = false;
+	float           g_stamina_threshold_to_start_using_health = 0.08f;
 	float           g_stamina_threshold = 0.f;
 	float           g_stamina_haptic_strength = 1.f;
 	int             g_stamina_visual_idx = 2;
@@ -451,7 +453,6 @@ namespace arrownock
 				}
 			}
 		}
-		else { _DEBUGLOG("FX rate limit"); }
 	}
 
 	/* true: player has enough stamina */
@@ -459,20 +460,31 @@ namespace arrownock
 	{
 		if (a_threshold > 0.f)
 		{
-			float stam = 0;
+			auto actorvalue = RE::ActorValue::kStamina;
+			if (g_stamina_use_health)
+			{
+				if (helper::GetAVPercent(RE::PlayerCharacter::GetSingleton(),
+						RE::ActorValue::kStamina) > g_stamina_threshold_to_start_using_health)
+				{
+					return true;
+				}
+				actorvalue = RE::ActorValue::kHealth;
+			}
+
+			float value = 0;
+
 			if (a_threshold < 1.f)
 			{
 				// compare percentages
-				stam = helper::GetAVPercent(
-					RE::PlayerCharacter::GetSingleton(), RE::ActorValue::kStamina);
+				value = helper::GetAVPercent(RE::PlayerCharacter::GetSingleton(), actorvalue);
 			}
 			else
 			{
 				// compare flat values
-				stam = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner()->GetActorValue(
-					RE::ActorValue::kStamina);
+				value = RE::PlayerCharacter::GetSingleton()->AsActorValueOwner()->GetActorValue(
+					actorvalue);
 			}
-			return stam > a_threshold;
+			return value > a_threshold;
 		}
 		return true;
 	}
@@ -561,9 +573,12 @@ namespace arrownock
 					g_firebutton = (vr::EVRButtonId)helper::ReadIntFromIni(config, "FireButtonID");
 					g_debug_print = helper::ReadIntFromIni(config, "Debug");
 					g_grace_period_ms = helper::ReadIntFromIni(config, "iGracePeriod");
-					g_stamina_threshold = helper::ReadFloatFromIni(config, "fStaminaThreshold");
+					g_stamina_threshold = helper::ReadFloatFromIni(config, "fAttributeThreshold");
 					if (g_stamina_threshold > 0.f)
 					{
+						g_stamina_use_health = helper::ReadIntFromIni(config, "bUseHealth");
+						g_stamina_threshold_to_start_using_health =
+							helper::ReadFloatFromIni(config, "fSecondaryAttributeThreshold");
 						g_stamina_autorecover =
 							helper::ReadIntFromIni(config, "iAutonockAfterBlocking");
 						g_stamina_haptic_strength =
