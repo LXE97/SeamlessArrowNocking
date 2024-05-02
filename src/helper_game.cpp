@@ -262,4 +262,54 @@ namespace helper
 
 		return 0;
 	}
+
+	std::string ReadStringFromIni(std::ifstream& a_file, std::string a_setting)
+	{
+		if (a_file.is_open())
+		{
+			std::string line;
+			while (std::getline(a_file, line))
+			{
+				if (line.find(a_setting) == 0)
+				{
+					auto found = line.find('=');
+					if (found != std::string::npos)
+					{
+						a_file.clear();
+						a_file.seekg(0, std::ios::beg);
+
+						// Extract the substring after '=' and trim any leading/trailing whitespace
+						std::string val = line.substr(found + 1);
+						val = val.erase(
+							0, val.find_first_not_of(" \t\n\r"));  // Trim leading whitespace
+						val = val.erase(
+							val.find_last_not_of(" \t\n\r") + 1);  // Trim trailing whitespace
+
+						SKSE::log::trace("{} : {}", a_setting, val);
+						return val;
+					}
+				}
+			}
+		}
+
+		return "";
+	}
+
+	bool InitializeSound(BSSoundHandle& a_handle, std::string a_editorID)
+	{
+		auto man = BSAudioManager::GetSingleton();
+		man->BuildSoundDataFromEditorID(a_handle, a_editorID.c_str(), 0x10);
+		return a_handle.IsValid();
+	}
+
+	bool PlaySound(BSSoundHandle& a_handle, float a_volume, RE::NiPoint3& a_position,
+		RE::NiAVObject* a_follow_node)
+	{
+		a_handle.SetPosition(a_position);
+		a_handle.SetObjectToFollow(a_follow_node);
+		a_handle.SetVolume(a_volume);
+		a_handle.Play();
+		return a_handle.IsPlaying();
+	}
+
 }

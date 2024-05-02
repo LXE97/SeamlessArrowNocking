@@ -59,8 +59,13 @@ namespace helper
 	inline void PrintVec(RE::NiPoint3& v) { SKSE::log::trace("{} {} {}", v.x, v.y, v.z); }
 #define VECTOR(X) X.x, X.y, X.z
 
+	bool InitializeSound(RE::BSSoundHandle& a_handle, std::string a_editorID);
+	bool PlaySound(RE::BSSoundHandle& a_handle, float a_volume, RE::NiPoint3& a_position,
+		RE::NiAVObject* a_follow_node);
+
 	std::filesystem::path GetGamePath();
 	float                 ReadFloatFromIni(std::ifstream& a_file, std::string a_setting);
 	int                   ReadIntFromIni(std::ifstream& a_file, std::string a_setting);
+	std::string           ReadStringFromIni(std::ifstream& a_file, std::string a_setting);
 	bool                  ReadConfig(const char* a_ini_path);
 }
