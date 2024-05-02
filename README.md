@@ -1,4 +1,4 @@
-## (WIP) SKSE plugin source for Skyrim mod: Seamless Arrow Nocking
+## SKSE plugin source for Skyrim mod: Seamless Arrow Nocking
 
 ### User requirements:
 * SKSE

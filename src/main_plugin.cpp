@@ -224,9 +224,6 @@ namespace arrownock
 						{
 							// Player is attemping to fire a bow with not enough stamina, block the trigger press
 							PlayStaminaInhibitorFX();
-							_DEBUGLOG("Manual arrow firing blocked, stamina: {}",
-								helper::GetAVPercent(
-									RE::PlayerCharacter::GetSingleton(), RE::ActorValue::kStamina));
 							return true;
 						}
 					}
@@ -240,48 +237,44 @@ namespace arrownock
 	void OnUpdate()
 	{
 		static bool fake_button_down = false;
-		static bool stamina_blocked = false;
-		static int  frame_count = 1000;
+		static int  frame_count = 0;
 
 		switch (g_state)
 		{
 		case ArrowState::kIdle:
 			break;
 		case ArrowState::kArrowHeld:
-			if (IsOverlapping(g_overlap_radius * 0.95))
 			{
-				if (!stamina_blocked)
+				static bool stamina_blocked = false;
+				if (IsOverlapping(g_overlap_radius * 0.95))
 				{
-					// Stamina Inhibitor Feature: block auto nocking
-					if (g_stamina_threshold > 0.f && !TestStamina(g_stamina_threshold))
+					if (!stamina_blocked)
 					{
-						// Player is attemping to fire a bow with not enough stamina
-						PlayStaminaInhibitorFX();
+						// Stamina Inhibitor Feature: block auto nocking
+						if (g_stamina_threshold > 0.f && !TestStamina(g_stamina_threshold))
+						{
+							// Player is attemping to fire a bow with not enough stamina
+							PlayStaminaInhibitorFX();
 
-						// Set the flag that indicates player must move out of overlap zone to reset the stamina block
-						if (!g_stamina_autorecover) { stamina_blocked = true; }
-
-						_DEBUGLOG("Auto arrow nocking blocked, stamina: {} ({}%) ",
-							RE::PlayerCharacter::GetSingleton()->AsActorValueOwner()->GetActorValue(
-								RE::ActorValue::kStamina),
-							helper::GetAVPercent(
-								RE::PlayerCharacter::GetSingleton(), RE::ActorValue::kStamina));
-					}
-					else
-					{
-						fake_button_down = true;
-						frame_count = 0;
-						TryNockArrow(true);
-						StateTransition(ArrowState::kTryToNock);
+							// Set the flag that indicates player must move out of overlap zone to reset the stamina block
+							if (!g_stamina_autorecover) { stamina_blocked = true; }
+						}
+						else
+						{
+							fake_button_down = true;
+							frame_count = 0;
+							TryNockArrow(true);
+							StateTransition(ArrowState::kTryToNock);
+						}
 					}
 				}
-			}
-			// stamina inhibitor: unblock autonocking when player moves out of overlap zone,
-			// even if stamina has not recovered we'll check it again and repeat the FX next
-			// time they try
-			else if (stamina_blocked) { stamina_blocked = false; }
+				// stamina inhibitor: unblock autonocking when player moves out of overlap zone,
+				// even if stamina has not recovered we'll check it again and repeat the FX next
+				// time they try
+				else if (stamina_blocked) { stamina_blocked = false; }
 
-			break;
+				break;
+			}
 		case ArrowState::kTryToNock:
 			if (IsArrowNocked()) { StateTransition(ArrowState::kArrowNocked); }
 			else if (!IsOverlapping(g_overlap_radius * 0.95))
@@ -390,7 +383,8 @@ namespace arrownock
 
 	void PlayStaminaInhibitorFX()
 	{
-		constexpr int                                kMinFXInterval = 1000;
+		constexpr int kMinFXInterval = 1400;
+
 		static std::chrono::steady_clock::time_point last_played = {};
 
 		auto now = std::chrono::steady_clock::now();
@@ -399,6 +393,12 @@ namespace arrownock
 			kMinFXInterval)
 		{
 			last_played = now;
+
+			_DEBUGLOG("Bow draw blocked, stamina: {} ({}%) ",
+				RE::PlayerCharacter::GetSingleton()->AsActorValueOwner()->GetActorValue(
+					RE::ActorValue::kStamina),
+				helper::GetAVPercent(
+					RE::PlayerCharacter::GetSingleton(), RE::ActorValue::kStamina));
 
 			auto pc = RE::PlayerCharacter::GetSingleton();
 			auto node = pc->Get3D(g_vrik_disabled)->GetObjectByName("NPC L Finger10 [LF10]");
