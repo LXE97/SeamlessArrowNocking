@@ -300,9 +300,11 @@ namespace arrownock
 			// compute overlap
 			auto bow_node = pcvr->ArrowSnapNode;
 			auto arrow_node = g_left_hand_mode ? pcvr->LeftWandNode : pcvr->RightWandNode;
-
-			return (arrow_node->world.translate - bow_node->world.translate).SqrLength() <
-				a_radius_squared;
+			if (bow_node && arrow_node)
+			{
+				return (arrow_node->world.translate - bow_node->world.translate).SqrLength() <
+					a_radius_squared;
+			}
 		}
 		return false;
 	}
@@ -312,12 +314,15 @@ namespace arrownock
 	{
 		if (auto pc = RE::PlayerCharacter::GetSingleton(); pc && pc->Get3D(g_vrik_disabled))
 		{
-			auto bow = pc->Get3D(g_vrik_disabled)->GetObjectByName("SHIELD")->world;
-			auto hand =
-				vrinput::GetHandNode((vrinput::Hand)!g_left_hand_mode, g_vrik_disabled)->world;
-
-			auto rotdiff = bow.rotate.Transpose() * hand.rotate;
-			rotdiff.ToEulerAnglesXYZ(*out);
+			if (auto bow = pc->Get3D(g_vrik_disabled)->GetObjectByName("SHIELD"))
+			{
+				if (auto hand =
+						vrinput::GetHandNode((vrinput::Hand)!g_left_hand_mode, g_vrik_disabled))
+				{
+					auto rotdiff = bow->world.rotate.Transpose() * hand->world.rotate;
+					rotdiff.ToEulerAnglesXYZ(*out);
+				}
+			}
 		}
 	}
 
